@@ -108,7 +108,7 @@ def default_url_formatter(type: EntryType, path: List[str]) -> Tuple[str, str]:
 
         # Encode version information into the search driver
         if url == 'search.js':
-            url = 'search-v{}.js'.format(searchdata_format_version)
+            url = f'search-v{searchdata_format_version}.js'
 
         return url, url
 
@@ -121,7 +121,12 @@ def default_id_formatter(type: EntryType, path: List[str]) -> str:
     # Encode pybind11 function overloads into the anchor (hash them, like Rust
     # does)
     if type == EntryType.OVERLOADED_FUNCTION:
-        return path[0] + '-' + hashlib.sha1(', '.join([str(i) for i in path[1:]]).encode('utf-8')).hexdigest()[:5]
+        return (
+            f'{path[0]}-'
+            + hashlib.sha1(
+                ', '.join([str(i) for i in path[1:]]).encode('utf-8')
+            ).hexdigest()[:5]
+        )
 
     if type == EntryType.ENUM_VALUE:
         assert len(path) == 2
@@ -217,12 +222,14 @@ class State:
         self.crawled: Set[object] = set()
 
 def map_name_prefix(state: State, type: str) -> str:
-    for prefix, replace in state.name_mapping.items():
-        if type == prefix or type.startswith(prefix + '.'):
-            return replace + type[len(prefix):]
-
-    # No mapping found, return the type as-is
-    return type
+    return next(
+        (
+            replace + type[len(prefix) :]
+            for prefix, replace in state.name_mapping.items()
+            if type == prefix or type.startswith(f'{prefix}.')
+        ),
+        type,
+    )
 
 def object_type(state: State, object, name) -> EntryType:
     if inspect.ismodule(object): return EntryType.MODULE
@@ -231,7 +238,13 @@ def object_type(state: State, object, name) -> EntryType:
             return EntryType.ENUM
         else: return EntryType.CLASS
     if inspect.isfunction(object) or inspect.isbuiltin(object) or inspect.isroutine(object):
-        if state.config['PYBIND11_COMPATIBILITY'] and object.__doc__ and object.__doc__.startswith("{}(*args, **kwargs)\nOverloaded function.\n\n".format(name)):
+        if (
+            state.config['PYBIND11_COMPATIBILITY']
+            and object.__doc__
+            and object.__doc__.startswith(
+                f"{name}(*args, **kwargs)\nOverloaded function.\n\n"
+            )
+        ):
             return EntryType.OVERLOADED_FUNCTION
         else:
             return EntryType.FUNCTION
@@ -273,33 +286,42 @@ def is_underscored_and_undocumented(state: State, type, path, docstring):
 
 # Builtin dunder functions have hardcoded docstrings. This is totally useless
 # to have in the docs, so filter them out. Uh... kinda ugly.
-_filtered_builtin_functions = set([
+_filtered_builtin_functions = {
     ('__delattr__', "Implement delattr(self, name)."),
     ('__eq__', "Return self==value."),
     ('__ge__', "Return self>=value."),
     ('__getattribute__', "Return getattr(self, name)."),
     ('__gt__', "Return self>value."),
     ('__hash__', "Return hash(self)."),
-    ('__init__', "Initialize self.  See help(type(self)) for accurate signature."),
-    ('__init_subclass__',
+    (
+        '__init__',
+        "Initialize self.  See help(type(self)) for accurate signature.",
+    ),
+    (
+        '__init_subclass__',
         "This method is called when a class is subclassed.\n\n"
         "The default implementation does nothing. It may be\n"
-        "overridden to extend subclasses.\n"),
+        "overridden to extend subclasses.\n",
+    ),
     ('__le__', "Return self<=value."),
     ('__lt__', "Return self<value."),
     ('__ne__', "Return self!=value."),
-    ('__new__',
-        "Create and return a new object.  See help(type) for accurate signature."),
+    (
+        '__new__',
+        "Create and return a new object.  See help(type) for accurate signature.",
+    ),
     ('__repr__', "Return repr(self)."),
     ('__setattr__', "Implement setattr(self, name, value)."),
     ('__str__', "Return str(self)."),
-    ('__subclasshook__',
+    (
+        '__subclasshook__',
         "Abstract classes can override this to customize issubclass().\n\n"
         "This is invoked early on by abc.ABCMeta.__subclasscheck__().\n"
         "It should return True, False or NotImplemented.  If it returns\n"
         "NotImplemented, the normal algorithm is used.  Otherwise, it\n"
-        "overrides the normal algorithm (and the outcome is cached).\n")
-])
+        "overrides the normal algorithm (and the outcome is cached).\n",
+    ),
+}
 
 # Python 3.6 has slightly different docstrings than 3.7
 if LooseVersion(sys.version) >= LooseVersion("3.7"):
@@ -319,9 +341,9 @@ else:
         ('__sizeof__', "__sizeof__() -> int\nsize of object in memory, in bytes")
     })
 
-_filtered_builtin_properties = set([
+_filtered_builtin_properties = {
     ('__weakref__', "list of weak references to the object (if defined)")
-])
+}
 
 _automatically_created_by_attrs = """
         Automatically created by attrs.
@@ -329,26 +351,29 @@ _automatically_created_by_attrs = """
 _automatically_created_by_attrs_even_more_indented = """
             Automatically created by attrs.
             """
-_filtered_attrs_functions = set([
-    ('__ne__', """
+_filtered_attrs_functions = {
+    (
+        '__ne__',
+        """
     Check equality and either forward a NotImplemented or return the result
     negated.
-    """),
+    """,
+    ),
     ('__lt__', _automatically_created_by_attrs),
     ('__le__', _automatically_created_by_attrs),
     ('__gt__', _automatically_created_by_attrs),
     ('__ge__', _automatically_created_by_attrs),
     ('__repr__', _automatically_created_by_attrs),
     ('__getstate__', _automatically_created_by_attrs_even_more_indented),
-    ('__setstate__', _automatically_created_by_attrs_even_more_indented)
-])
+    ('__setstate__', _automatically_created_by_attrs_even_more_indented),
+}
 
 def crawl_enum(state: State, path: List[str], enum_, parent_url):
     enum_entry = Empty()
     enum_entry.type = EntryType.ENUM
     enum_entry.object = enum_
     enum_entry.path = path
-    enum_entry.url = '{}#{}'.format(parent_url, state.config['ID_FORMATTER'](EntryType.ENUM, path[-1:]))
+    enum_entry.url = f"{parent_url}#{state.config['ID_FORMATTER'](EntryType.ENUM, path[-1:])}"
     enum_entry.css_classes = ['m-doc']
     enum_entry.values = []
 
@@ -358,7 +383,7 @@ def crawl_enum(state: State, path: List[str], enum_, parent_url):
             entry = Empty()
             entry.type = EntryType.ENUM_VALUE
             entry.path = subpath
-            entry.url = '{}#{}'.format(parent_url, state.config['ID_FORMATTER'](EntryType.ENUM_VALUE, subpath[-2:]))
+            entry.url = f"{parent_url}#{state.config['ID_FORMATTER'](EntryType.ENUM_VALUE, subpath[-2:])}"
             entry.css_classes = ['m-doc']
             state.name_map['.'.join(subpath)] = entry
 
@@ -370,7 +395,7 @@ def crawl_enum(state: State, path: List[str], enum_, parent_url):
             entry = Empty()
             entry.type = EntryType.ENUM_VALUE
             entry.path = subpath
-            entry.url = '{}#{}'.format(parent_url, state.config['ID_FORMATTER'](EntryType.ENUM_VALUE, subpath[-2:]))
+            entry.url = f"{parent_url}#{state.config['ID_FORMATTER'](EntryType.ENUM_VALUE, subpath[-2:])}"
             entry.css_classes = ['m-doc']
             state.name_map['.'.join(subpath)] = entry
 
@@ -387,7 +412,8 @@ def crawl_class(state: State, path: List[str], class_):
     if id(class_) in state.crawled:
         for name, previous_entry in state.name_map.items():
             if id(previous_entry.object) == id(class_): break
-        else: assert False, "%s marked as crawled but can't find it" % '.'.join(path)
+        else:else
+            assert False, f"{'.'.join(path)} marked as crawled but can't find it"
         logging.error("Class %s previously found in %s, only one occurence will be chosen. Ensure each class is exposed only in a single module for generating correct documentation.", '.'.join(path), '.'.join(previous_entry.path))
         state.name_map['.'.join(path)] = previous_entry
         return
@@ -424,13 +450,11 @@ def crawl_class(state: State, path: List[str], class_):
 
             crawl_class(state, subpath, object)
 
-        # Crawl enum values (they also add itself ot the name_map)
         elif type_ == EntryType.ENUM:
             if is_underscored_and_undocumented(state, type_, subpath, object.__doc__): continue
 
             crawl_enum(state, subpath, object, class_entry.url)
 
-        # Add other members directly
         else:
             # Filter out private / unwanted members
             if type_ in [EntryType.FUNCTION, EntryType.OVERLOADED_FUNCTION]:
@@ -475,7 +499,7 @@ def crawl_class(state: State, path: List[str], class_):
             entry.type = type_
             entry.object = object
             entry.path = subpath
-            entry.url = '{}#{}'.format(class_entry.url, state.config['ID_FORMATTER'](type_, subpath[-1:]))
+            entry.url = f"{class_entry.url}#{state.config['ID_FORMATTER'](type_, subpath[-1:])}"
             entry.css_classes = ['m-doc']
             state.name_map['.'.join(subpath)] = entry
 
@@ -501,7 +525,7 @@ def crawl_class(state: State, path: List[str], class_):
             entry.type = EntryType.DATA
             entry.object = None # TODO will this break things?
             entry.path = subpath
-            entry.url = '{}#{}'.format(class_entry.url, state.config['ID_FORMATTER'](EntryType.DATA, subpath[-1:]))
+            entry.url = f"{class_entry.url}#{state.config['ID_FORMATTER'](EntryType.DATA, subpath[-1:])}"
             state.name_map['.'.join(subpath)] = entry
             class_entry.members += [name]
 
@@ -526,7 +550,7 @@ def crawl_class(state: State, path: List[str], class_):
             entry.type = EntryType.PROPERTY # TODO: or data?
             entry.object = attrib
             entry.path = subpath
-            entry.url = '{}#{}'.format(class_entry.url, state.config['ID_FORMATTER'](EntryType.PROPERTY, subpath[-1:])) # TODO: or data?
+            entry.url = f"{class_entry.url}#{state.config['ID_FORMATTER'](EntryType.PROPERTY, subpath[-1:])}"
             state.name_map['.'.join(subpath)] = entry
 
     # Add itself to the name map
@@ -548,8 +572,8 @@ def crawl_module(state: State, path: List[str], module) -> List[Tuple[List[str],
     module_entry = Empty()
     module_entry.type = EntryType.MODULE
     module_entry.object = module
-    module_entry.path = path
     module_entry.css_classes = ['m-doc']
+    module_entry.path = path
     module_entry.url = state.config['URL_FORMATTER'](EntryType.MODULE, path)[1]
     module_entry.members = []
 
@@ -584,10 +608,8 @@ def crawl_module(state: State, path: List[str], module) -> List[Tuple[List[str],
             if inspect.ismodule(object) and object.__name__ != '.'.join(subpath):
                 assert object.__name__ not in state.name_mapping
                 state.name_mapping[object.__name__] = '.'.join(subpath)
-            # logging.Logger objects have __module__ but don't have __name__,
-            # check both
             elif hasattr(object, '__module__') and hasattr(object, '__name__'):
-                subname = object.__module__ + '.' + object.__name__
+                subname = f'{object.__module__}.{object.__name__}'
                 if subname != '.'.join(subpath):
                     assert subname not in state.name_mapping
                     state.name_mapping[subname] = '.'.join(subpath)
@@ -622,20 +644,12 @@ def crawl_module(state: State, path: List[str], module) -> List[Tuple[List[str],
                 entry.type = type_
                 entry.object = object
                 entry.path = subpath
-                entry.url = '{}#{}'.format(module_entry.url, state.config['ID_FORMATTER'](
-                    # We have just one entry for all functions (and we don't
-                    # know the parameters yet) so the link should lead to the
-                    # generic name, not a particular overload
-                    type_ if type_ != EntryType.OVERLOADED_FUNCTION else EntryType.FUNCTION,
-                    subpath[-1:]))
+                entry.url = f"{module_entry.url}#{state.config['ID_FORMATTER'](type_ if type_ != EntryType.OVERLOADED_FUNCTION else EntryType.FUNCTION, subpath[-1:])}"
                 entry.css_classes = ['m-doc']
                 state.name_map['.'.join(subpath)] = entry
 
             module_entry.members += [name]
 
-    # Otherwise, enumerate the members using inspect. However, inspect lists
-    # also imported modules, functions and classes, so take only those which
-    # have __module__ equivalent to `path`.
     else:
         for name, object in inspect.getmembers(module):
             # If this is not a module, check if the enclosing module of the
@@ -644,17 +658,7 @@ def crawl_module(state: State, path: List[str], module) -> List[Tuple[List[str],
             # TODO: xml.dom.domreg says the things from it should be imported
             #   as xml.dom.foo() and this check discards them, can it be done
             #   without manually adding __all__?
-            if not inspect.ismodule(object):
-                # Variables don't have the __module__ attribute, so check for
-                # its presence. Right now *any* variable will be present in the
-                # output, as there is no way to check where it comes from.
-                if hasattr(object, '__module__') and map_name_prefix(state, object.__module__) != '.'.join(path):
-                    continue
-
-            # If this is a module, then things get complicated again and we
-            # need to handle modules and packages differently. See also for
-            # more info: https://stackoverflow.com/a/7948672
-            else:
+            if inspect.ismodule(object):
                 # pybind11 submodules have __package__ set to None (instead of
                 # '') for nested modules. Allow these. The parent's __package__
                 # can be None (if it's a nested submodule), '' (if it's a
@@ -663,15 +667,14 @@ def crawl_module(state: State, path: List[str], module) -> List[Tuple[List[str],
                 if state.config['PYBIND11_COMPATIBILITY'] and object.__package__ is None:
                     pass # yes, do nothing
 
-                # The parent is a single-file module (not a package), these
-                # don't have submodules so this is most definitely an imported
-                # module. Source: https://docs.python.org/3/reference/import.html#packages
                 elif not module.__package__: continue
+                elif object.__package__ not in [
+                    module.__package__,
+                    f'{module.__package__}.{name}',
+                ]: continue
 
-                # The parent is a package and this is either a submodule or a
-                # subpackage. Check that the __package__ of parent and child is
-                # either the same or it's parent + child name
-                elif object.__package__ not in [module.__package__, module.__package__ + '.' + name]: continue
+            elif hasattr(object, '__module__') and map_name_prefix(state, object.__module__) != '.'.join(path):
+                continue
 
             type_ = object_type(state, object, name)
             subpath = path + [name]
@@ -700,12 +703,7 @@ def crawl_module(state: State, path: List[str], module) -> List[Tuple[List[str],
                 entry.type = type_
                 entry.object = object
                 entry.path = subpath
-                entry.url = '{}#{}'.format(module_entry.url, state.config['ID_FORMATTER'](
-                    # We have just one entry for all functions (and we don't
-                    # know the parameters yet) so the link should lead to the
-                    # generic name, not a particular overload
-                    type_ if type_ != EntryType.OVERLOADED_FUNCTION else EntryType.FUNCTION,
-                    subpath[-1:]))
+                entry.url = f"{module_entry.url}#{state.config['ID_FORMATTER'](type_ if type_ != EntryType.OVERLOADED_FUNCTION else EntryType.FUNCTION, subpath[-1:])}"
                 entry.css_classes = ['m-doc']
                 state.name_map['.'.join(subpath)] = entry
 
@@ -746,10 +744,10 @@ def make_relative_name(state: State, referrer_path: List[str], name):
         for i in reversed(range(len(referrer_path))):
             potentially_ambiguous = referrer_path[:i] + shortened_path
             if '.'.join(potentially_ambiguous) in state.name_map:
-                if potentially_ambiguous == entry.path: return False
-                else: return True
+                return potentially_ambiguous != entry.path
         # the target *has to be* found
         assert False # pragma: no cover
+
     shortened_path = entry.path[common_prefix_length:]
     while common_prefix_length and is_ambiguous(shortened_path):
         common_prefix_length -= 1
@@ -764,13 +762,10 @@ def make_name_link(state: State, referrer_path: List[str], name) -> str:
     # Not found, return as-is. However, if the prefix is one of the
     # INPUT_MODULES, emit a warning to notify the user of a potentially missing
     # stuff from the docs.
-    if not name in state.name_map:
+    if name not in state.name_map:
         for module in state.config['INPUT_MODULES']:
-            if isinstance(module, str):
-                module_name = module
-            else:
-                module_name = module.__name__
-            if name.startswith(module_name + '.'):
+            module_name = module if isinstance(module, str) else module.__name__
+            if name.startswith(f'{module_name}.'):
                 logging.warning("could not resolve a link to %s which is among INPUT_MODULES (referred from %s), possibly hidden/undocumented?", name, '.'.join(referrer_path))
                 break
         return name
@@ -779,7 +774,7 @@ def make_name_link(state: State, referrer_path: List[str], name) -> str:
     relative_name = make_relative_name(state, referrer_path, name)
 
     entry = state.name_map[name]
-    return '<a href="{}" class="{}">{}</a>'.format(entry.url, ' '.join(entry.css_classes), relative_name)
+    return f"""<a href="{entry.url}" class="{' '.join(entry.css_classes)}">{relative_name}</a>"""
 
 _pybind_name_rx = re.compile('[a-zA-Z0-9_]*')
 _pybind_arg_name_rx = re.compile('[*a-zA-Z0-9_]+')

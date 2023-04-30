@@ -48,11 +48,7 @@ def _is_math_figure(parent):
     if not isinstance(parent, nodes.figure): return False
     if 'm-figure' not in parent.get('classes', []): return False
 
-    # And as a first visible node of such type
-    for child in parent:
-        if not isinstance(child, nodes.Invisible): return False
-
-    return True
+    return all(isinstance(child, nodes.Invisible) for child in parent)
 
 class Math(rst.Directive):
     option_spec = {'class': directives.class_option,
@@ -79,12 +75,21 @@ class Math(rst.Directive):
 
         content = '\n'.join(self.content)
 
-        _, svg = latex2svgextra.fetch_cached_or_render("$$" + content + "$$")
+        _, svg = latex2svgextra.fetch_cached_or_render(f"$${content}$$")
 
         # If this is the first real node inside a math figure, put the SVG
         # directly inside
         if _is_math_figure(parent):
-            node = nodes.raw(self.block_text, latex2svgextra.patch(content, svg, None, ' class="{}"'.format(' '.join(['m-math'] + self.options.get('classes', [])))), format='html')
+            node = nodes.raw(
+                self.block_text,
+                latex2svgextra.patch(
+                    content,
+                    svg,
+                    None,
+                    f""" class="{' '.join(['m-math'] + self.options.get('classes', []))}\"""",
+                ),
+                format='html',
+            )
             node.line = self.content_offset + 1
             self.add_name(node)
             return [node]
@@ -125,9 +130,9 @@ def math(role, rawtext, text, lineno, inliner, options={}, content=[]):
         classes += ' ' + ' '.join(options['classes'])
         del options['classes']
 
-    depth, svg = latex2svgextra.fetch_cached_or_render("$" + text + "$")
+    depth, svg = latex2svgextra.fetch_cached_or_render(f"${text}$")
 
-    attribs = ' class="{}"'.format(classes)
+    attribs = f' class="{classes}"'
     node = nodes.raw(rawtext, latex2svgextra.patch(text, svg, depth, attribs), format='html', **options)
     return [node], []
 

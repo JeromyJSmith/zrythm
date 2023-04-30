@@ -16,8 +16,8 @@ for subdir, dirs, files in os.walk(srcpath):
     for file in files:
         fullpath = os.path.join(subdir,file)
         if file.endswith('.po'):
-            print ('processing file %s' % fullpath)
-            with open(fullpath, 'r') as f :
+            print(f'processing file {fullpath}')
+            with open(fullpath, 'r') as f:
                 filedata = f.read()
 
                 # remove absolute directories (possible
@@ -117,5 +117,5 @@ for subdir, dirs, files in os.walk(srcpath):
                     filedata = completed_process.stdout
 
                 with open(fullpath, 'w') as f:
-                    print ('writing to file %s' % fullpath)
+                    print(f'writing to file {fullpath}')
                     f.write(filedata)

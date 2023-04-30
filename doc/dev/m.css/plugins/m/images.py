@@ -82,7 +82,7 @@ class Image(Directive):
         if 'target' in self.options:
             block = states.escape2null(
                 self.options['target']).splitlines()
-            block = [line for line in block]
+            block = list(block)
             target_type, data = self.state.parse_target(
                 block, self.block_text, self.lineno)
             if target_type == 'refuri':
@@ -110,7 +110,7 @@ class Image(Directive):
             file = os.path.join(os.getcwd(), settings['INPUT'])
             absuri = os.path.join(file, reference.format(filename=file, static=file))
             im = PIL.Image.open(absuri)
-            width = "{}px".format(int(im.width*self.options['scale']/100.0))
+            width = f"{int(im.width * self.options['scale'] / 100.0)}px"
         elif 'width' in self.options:
             width = self.options['width']
         elif 'height' in self.options:
@@ -125,7 +125,7 @@ class Image(Directive):
         if 'height' in self.options: del self.options['height']
         image_node = nodes.image(self.block_text, width=width, height=height, **self.options)
 
-        if not 'alt' in self.options and settings['M_IMAGES_REQUIRE_ALT_TEXT']:
+        if 'alt' not in self.options and settings['M_IMAGES_REQUIRE_ALT_TEXT']:
             error = self.state_machine.reporter.error(
                     'Images and figures require the alt text. See the M_IMAGES_REQUIRE_ALT_TEXT option.',
                     image_node,
@@ -187,9 +187,10 @@ class Figure(Image):
             elif not (isinstance(first_node, nodes.comment)
                       and len(first_node) == 0):
                 error = self.state_machine.reporter.error(
-                      'Figure caption must be a paragraph or empty comment, got %s' % type(first_node),
-                      nodes.literal_block(self.block_text, self.block_text),
-                      line=self.lineno)
+                    f'Figure caption must be a paragraph or empty comment, got {type(first_node)}',
+                    nodes.literal_block(self.block_text, self.block_text),
+                    line=self.lineno,
+                )
                 return [figure_node, error]
             if len(node) > 1:
                 figure_node += nodes.legend('', *node[1:])
@@ -240,15 +241,15 @@ class ImageGrid(rst.Directive):
                 caption = []
                 if 'FNumber' in exif:
                     numerator, denominator = _to_numerator_denominator_tuple(exif['FNumber'])
-                    caption += ["F{}".format(float(numerator)/float(denominator))]
+                    caption += [f"F{float(numerator) / float(denominator)}"]
                 if 'ExposureTime' in exif:
                     numerator, denominator = _to_numerator_denominator_tuple(exif['ExposureTime'])
                     if int(numerator) > int(denominator):
-                        caption += ["{} s".format(float(numerator)/float(denominator))]
+                        caption += [f"{float(numerator) / float(denominator)} s"]
                     else:
-                        caption += ["{}/{} s".format(numerator, denominator)]
+                        caption += [f"{numerator}/{denominator} s"]
                 if 'ISOSpeedRatings' in exif:
-                    caption += ["ISO {}".format(exif['ISOSpeedRatings'])]
+                    caption += [f"ISO {exif['ISOSpeedRatings']}"]
                 caption = ', '.join(caption)
 
             # If the caption is `..`, it's meant to be explicitly disabled

@@ -53,11 +53,12 @@ def _highlight(code, language, options, *, is_block, filters=[]):
         try:
             lexer = get_lexer_by_name(language)
         except ValueError:
-            logger.warning("No lexer found for language '{}', code highlighting disabled".format(language))
+            logger.warning(
+                f"No lexer found for language '{language}', code highlighting disabled"
+            )
             lexer = TextLexer()
 
-    if (isinstance(lexer, BashSessionLexer) or
-        isinstance(lexer, ansilexer.AnsiLexer)):
+    if isinstance(lexer, (BashSessionLexer, ansilexer.AnsiLexer)):
         class_ = 'm-console'
     else:
         class_ = 'm-code'
@@ -75,12 +76,10 @@ def _highlight(code, language, options, *, is_block, filters=[]):
     global filters_pre
     # First apply local pre filters, if any
     for filter in filters:
-        f = filters_pre.get((lexer.name, filter))
-        if f: code = f(code)
-    # Then a global pre filter, if any
-    f = filters_pre.get(lexer.name)
-    if f: code = f(code)
-
+        if f := filters_pre.get((lexer.name, filter)):
+            code = f(code)
+    if f := filters_pre.get(lexer.name):
+        code = f(code)
     highlighted = highlight(code, lexer, formatter).rstrip()
     # Strip whitespace around if inline code, strip only trailing whitespace if
     # a block
@@ -89,12 +88,10 @@ def _highlight(code, language, options, *, is_block, filters=[]):
     global filters_post
     # First apply local post filters, if any
     for filter in filters:
-        f = filters_post.get((lexer.name, filter))
-        if f: highlighted = f(highlighted)
-    # Then a global post filter, if any
-    f = filters_post.get(lexer.name)
-    if f: highlighted = f(highlighted)
-
+        if f := filters_post.get((lexer.name, filter)):
+            highlighted = f(highlighted)
+    if f := filters_post.get(lexer.name):
+        highlighted = f(highlighted)
     return class_, highlighted
 
 class Code(Directive):
@@ -191,19 +188,14 @@ class Include(docutils.parsers.rst.directives.misc.Include):
         except UnicodeError as error:
             raise self.severe('Problem with "%s" directive:\n%s' %
                               (self.name, ErrorString(error)))
-        # start-after/end-before: no restrictions on newlines in match-text,
-        # and no restrictions on matching inside lines vs. line boundaries
-        after_text = self.options.get('start-after', None)
-        if after_text:
+        if after_text := self.options.get('start-after', None):
             # skip content in rawtext before *and incl.* a matching text
             after_index = rawtext.find(after_text)
             if after_index < 0:
                 raise self.severe('Problem with "start-after" option of "%s" '
                                   'directive:\nText not found.' % self.name)
             rawtext = rawtext[after_index + len(after_text):]
-        # Compared to start-after, this includes the matched line
-        on_text = self.options.get('start-on', None)
-        if on_text:
+        if on_text := self.options.get('start-on', None):
             on_index = rawtext.find('\n' + on_text)
             if on_index < 0:
                 raise self.severe('Problem with "start-on" option of "%s" '
@@ -270,7 +262,7 @@ def code(role, rawtext, text, lineno, inliner, options={}, content=[]):
         del options['classes']
 
     # If language is not specified, render a simple literal
-    if not 'language' in options:
+    if 'language' not in options:
         content = nodes.raw('', utils.unescape(text), format='html')
         node = nodes.literal(rawtext, '', **options)
         node.append(content)
@@ -316,10 +308,11 @@ def register_mcss(mcss_settings, **kwargs):
 # do nothing.
 
 def _pelican_configure(pelicanobj):
-    settings = {}
-    for key in ['M_CODE_FILTERS_PRE', 'M_CODE_FILTERS_POST']:
-        if key in pelicanobj.settings: settings[key] = pelicanobj.settings[key]
-
+    settings = {
+        key: pelicanobj.settings[key]
+        for key in ['M_CODE_FILTERS_PRE', 'M_CODE_FILTERS_POST']
+        if key in pelicanobj.settings
+    }
     register_mcss(mcss_settings=settings)
 
 def register(): # for Pelican

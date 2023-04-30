@@ -204,17 +204,17 @@ class AnsiLexer(RegexLexer):
                                     self._named_colors[command - 100])
 
         if self._bright and self._foreground in self._named_colors:
-            token = 'Bright' + self._foreground
+            token = f'Bright{self._foreground}'
         elif self._bright and not self._foreground:
             token = 'BrightDefault'
         else:
             token = self._foreground
 
-        if (self._background):
-            token += '-On' + self._background
+        if self._background:
+            token += f'-On{self._background}'
 
         if token:
-            token = 'Generic.Ansi' + token
+            token = f'Generic.Ansi{token}'
             yield (match.start(), string_to_tokentype(token), text)
         else:
             yield (match.start(), Text, text)
@@ -277,21 +277,15 @@ class HtmlAnsiFormatter(HtmlFormatter):
         html_classes = ['g']
         html_styles = []
 
-        named_foreground = match.group('NamedForeground')
-        if named_foreground:
-            html_classes.append("g-Ansi" + named_foreground)
-        else:
-            rgb_foreground = match.group('RGBForeground')
-            if rgb_foreground:
-                html_styles.append('color: #' + rgb_foreground)
+        if named_foreground := match.group('NamedForeground'):
+            html_classes.append(f"g-Ansi{named_foreground}")
+        elif rgb_foreground := match.group('RGBForeground'):
+            html_styles.append(f'color: #{rgb_foreground}')
 
-        named_background = match.group('NamedBackground')
-        if named_background:
-            html_classes.append("g-AnsiBackground" + named_background)
-        else:
-            rgb_background = match.group('RGBBackground')
-            if rgb_background:
-                html_styles.append('background-color: #' + rgb_background)
+        if named_background := match.group('NamedBackground'):
+            html_classes.append(f"g-AnsiBackground{named_background}")
+        elif rgb_background := match.group('RGBBackground'):
+            html_styles.append(f'background-color: #{rgb_background}')
 
         result = ''
         if len(html_classes) > 1: # we don't want to emit just g

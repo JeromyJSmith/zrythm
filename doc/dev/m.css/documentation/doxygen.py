@@ -200,9 +200,7 @@ def add_wbr(text: str) -> str:
     elif '_' in text: # VERY_LONG_UPPER_CASE macro names
         return text.replace('_', '_<wbr />')
 
-    # These characters are quite common, so at least check that there is no
-    # space (which may hint that the text is actually some human language):
-    elif '/' in text and not ' ' in text: # URLs
+    elif '/' in text and ' ' not in text: # URLs
         return text.replace('/', '/<wbr />')
     else:
         return text
@@ -211,12 +209,14 @@ def parse_ref(state: State, element: ET.Element, add_inline_css_class: str = Non
     id = element.attrib['refid']
 
     if element.attrib['kindref'] == 'compound':
-        url = id + '.html'
+        url = f'{id}.html'
     elif element.attrib['kindref'] == 'member':
         i = id.rindex('_1')
-        url = id[:i] + '.html' + '#' + id[i+2:]
+        url = f'{id[:i]}.html#{id[i + 2:]}'
     else: # pragma: no cover
-        logging.critical("{}: unknown <ref> kind {}".format(state.current, element.attrib['kindref']))
+        logging.critical(
+            f"{state.current}: unknown <ref> kind {element.attrib['kindref']}"
+        )
         assert False
 
     if 'external' in element.attrib:
@@ -226,7 +226,9 @@ def parse_ref(state: State, element: ET.Element, add_inline_css_class: str = Non
                 url = os.path.join(baseurl, url)
                 break
         else: # pragma: no cover
-            logging.critical("{}: tagfile {} not specified in Doxyfile".format(state.current, element.attrib['external']))
+            logging.critical(
+                f"{state.current}: tagfile {element.attrib['external']} not specified in Doxyfile"
+            )
             assert False
         class_ = 'm-doc-external'
     else:
@@ -234,11 +236,11 @@ def parse_ref(state: State, element: ET.Element, add_inline_css_class: str = Non
     if add_inline_css_class: # Overrides the default set above
         class_ = add_inline_css_class
 
-    return '<a href="{}" class="{}">{}</a>'.format(url, class_, add_wbr(parse_inline_desc(state, element).strip()))
+    return f'<a href="{url}" class="{class_}">{add_wbr(parse_inline_desc(state, element).strip())}</a>'
 
 def make_include(state: State, file) -> Tuple[str, str]:
     if file in state.includes and state.compounds[state.includes[file]].has_details:
-        return (html.escape('<{}>'.format(file)), state.compounds[state.includes[file]].url)
+        return html.escape(f'<{file}>'), state.compounds[state.includes[file]].url
     return None
 
 def parse_id_and_include(state: State, element: ET.Element) -> Tuple[str, str, str, Tuple[str, str], bool]:
@@ -288,7 +290,7 @@ def parse_id_and_include(state: State, element: ET.Element) -> Tuple[str, str, s
             include = make_include(state, file)
             has_details = include and state.doxyfile['SHOW_INCLUDE_FILES']
 
-    return id[:i], id[:i] + '.html', id[i+2:], include, has_details
+    return id[:i], f'{id[:i]}.html', id[i+2:], include, has_details
 
 def extract_id_hash(state: State, element: ET.Element) -> str:
     # Can't use parse_id() here as sections with _1 in it have it verbatim
@@ -304,7 +306,9 @@ def extract_id_hash(state: State, element: ET.Element) -> str:
     # comes from parse_id()[0]. See the
     # contents_anchor_in_both_group_and_namespace test for a verification.
     id = element.attrib['id']
-    assert id.startswith(state.current_definition_url_base), "ID `%s` does not start with `%s`" % (id, state.current_definition_url_base)
+    assert id.startswith(
+        state.current_definition_url_base
+    ), f"ID `{id}` does not start with `{state.current_definition_url_base}`"
     return id[len(state.current_definition_url_base)+2:]
 
 and_re_src = re.compile(r'([^\s])&amp;&amp;([^\s])')
@@ -333,9 +337,9 @@ def parse_type(state: State, type: ET.Element) -> str:
             # https://github.com/doxygen/doxygen/pull/6587
             # TODO: this should get reverted and fixed properly so the
             # one-on-one case works as it should
-            out += '<a name="{}"></a>'.format(extract_id_hash(state, i))
+            out += f'<a name="{extract_id_hash(state, i)}"></a>'
         else: # pragma: no cover
-            logging.warning("{}: ignoring {} in <type>".format(state.current, i.tag))
+            logging.warning(f"{state.current}: ignoring {i.tag} in <type>")
 
         if i.tail: out += html.escape(i.tail)
 

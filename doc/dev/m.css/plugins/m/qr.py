@@ -61,11 +61,7 @@ class Qr(rst.Directive):
 
         attribs = ' class="{}"'.format(' '.join(['m-image'] + self.options.get('classes', [])))
 
-        if 'size' in self.options:
-            size = self.options['size']
-        else:
-            size = None
-
+        size = self.options['size'] if 'size' in self.options else None
         def preamble_repl(match): return _svg_preamble_dst.format(
             attribs=attribs,
             size=size if size else
@@ -73,6 +69,7 @@ class Qr(rst.Directive):
                 # and then to rem assuming 1 rem = 16px
                 '{:.2f}rem'.format(float(match.group('width'))*9.6/2.54/16.0, 2),
             viewBox=match.group('viewBox'))
+
         svg = _svg_preamble_src.sub(preamble_repl, svg)
         # There's a pointless difference between what qrcode 6.1 generates on
         # my Python 3.7 (w/o space) and on Travis Python 3.7. I don't know

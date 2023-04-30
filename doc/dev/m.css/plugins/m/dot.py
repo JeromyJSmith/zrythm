@@ -37,11 +37,7 @@ def _is_graph_figure(parent):
     if not isinstance(parent, nodes.figure): return False
     if 'm-figure' not in parent.get('classes', []): return False
 
-    # And as a first visible node of such type
-    for child in parent:
-        if not isinstance(child, nodes.Invisible): return False
-
-    return True
+    return all(isinstance(child, nodes.Invisible) for child in parent)
 
 class Dot(rst.Directive):
     has_content = True
@@ -57,7 +53,10 @@ class Dot(rst.Directive):
         # directly inside
         parent = self.state.parent
         if _is_graph_figure(parent):
-            svg = dot2svg.dot2svg(source, attribs=' class="{}"'.format(' '.join(['m-graph'] + self.options.get('classes', []))))
+            svg = dot2svg.dot2svg(
+                source,
+                attribs=f""" class="{' '.join(['m-graph'] + self.options.get('classes', []))}\"""",
+            )
             node = nodes.raw('', svg, format='html')
             return [node]
 

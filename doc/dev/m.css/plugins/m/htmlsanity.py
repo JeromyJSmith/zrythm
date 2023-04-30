@@ -90,22 +90,27 @@ def can_apply_typography(txtnode):
     #  - field names
     #  - bibliographic elements (author, date, ... fields)
     #  - links with title that's the same as URL (or e-mail)
-    if isinstance(txtnode.parent, nodes.literal) or \
-       isinstance(txtnode.parent.parent, nodes.literal) or \
-       isinstance(txtnode.parent, nodes.raw) or \
-       isinstance(txtnode.parent, nodes.field_name) or \
-       isinstance(txtnode.parent, nodes.Bibliographic) or \
-       (isinstance(txtnode.parent, nodes.reference) and
-            (txtnode.astext() == txtnode.parent.get('refuri', '') or 'mailto:' + txtnode.astext() == txtnode.parent.get('refuri', ''))):
+    if (
+        isinstance(txtnode.parent, nodes.literal)
+        or isinstance(txtnode.parent.parent, nodes.literal)
+        or isinstance(txtnode.parent, nodes.raw)
+        or isinstance(txtnode.parent, nodes.field_name)
+        or isinstance(txtnode.parent, nodes.Bibliographic)
+        or isinstance(txtnode.parent, nodes.reference)
+        and (
+            txtnode.astext() == txtnode.parent.get('refuri', '')
+            or f'mailto:{txtnode.astext()}' == txtnode.parent.get('refuri', '')
+        )
+    ):
         return False
 
     # From fields include only the ones that are in M_HTMLSANITY_FORMATTED_FIELDS
     if isinstance(txtnode.parent.parent, nodes.field_body):
         field_name_index = txtnode.parent.parent.parent.first_child_matching_class(nodes.field_name)
-        if txtnode.parent.parent.parent[field_name_index][0] in settings['M_HTMLSANITY_FORMATTED_FIELDS']:
-            return True
-        return False
-
+        return (
+            txtnode.parent.parent.parent[field_name_index][0]
+            in settings['M_HTMLSANITY_FORMATTED_FIELDS']
+        )
     return True
 
 class SmartQuotes(docutils.transforms.universal.SmartQuotes):
@@ -163,13 +168,14 @@ class SmartQuotes(docutils.transforms.universal.SmartQuotes):
                 else:
                     lang += '-x-altquot'
             # drop subtags missing in quotes:
-            for tag in utils.normalize_language_tag(lang):
-                if tag in smartquotes.smartchars.quotes:
-                    lang = tag
-                    break
-            else: # language not supported: (keep ASCII quotes)
-                lang = ''
-
+            lang = next(
+                (
+                    tag
+                    for tag in utils.normalize_language_tag(lang)
+                    if tag in smartquotes.smartchars.quotes
+                ),
+                '',
+            )
             # Iterator educating quotes in plain text:
             # '2': set all, using old school en- and em- dash shortcuts
             teacher = smartquotes.educate_tokens(self.get_tokens(txtnodes),
@@ -289,16 +295,15 @@ class SaneHtmlTranslator(HTMLTranslator):
     # Convert outdated width/height attributes to CSS styles, handle the scale
     # directly inside m.images; don't put URI in alt text.
     def visit_image(self, node):
-        atts = {}
         uri = node['uri']
         ext = os.path.splitext(uri)[1].lower()
-        atts['src'] = uri
+        atts = {'src': uri}
         if 'alt' in node: atts['alt'] = node['alt']
         style = []
         if node.get('width'):
-            style += ['width: {}'.format(node['width'])]
+            style += [f"width: {node['width']}"]
         if node.get('height'):
-            style += ['height: {}'.format(node['height'])]
+            style += [f"height: {node['height']}"]
         if style:
             atts['style'] = '; '.join(style)
         if (isinstance(node.parent, nodes.TextElement) or
@@ -444,7 +449,7 @@ class SaneHtmlTranslator(HTMLTranslator):
             atts['ids'] = [node['id']]
         style = []
         if node.get('width'):
-            style += ['width: {}'.format(node['width'])]
+            style += [f"width: {node['width']}"]
         if style:
             atts['style'] = '; '.join(style)
         self.body.append(self.starttag(node, 'figure', **atts))
@@ -498,10 +503,17 @@ class SaneHtmlTranslator(HTMLTranslator):
                 self.body.append('</a>')
         self.body.append('.</dt>\n<dd><span class="m-footnote">')
         if len(backrefs) == 1:
-            self.body.append('<a href="#{}">^</a>'.format(backrefs[0]))
+            self.body.append(f'<a href="#{backrefs[0]}">^</a>')
         else:
             self.body.append('^ ')
-            self.body.append(format(' '.join('<a href="#{}">{}</a>'.format(ref, chr(ord('a') + i)) for i, ref in enumerate(backrefs))))
+            self.body.append(
+                format(
+                    ' '.join(
+                        f"""<a href="#{ref}">{chr(ord('a') + i)}</a>"""
+                        for i, ref in enumerate(backrefs)
+                    )
+                )
+            )
         self.body.append('</span> ')
 
     def visit_line_block(self, node):
@@ -516,14 +528,14 @@ class SaneHtmlTranslator(HTMLTranslator):
         """
         Determine if the <p> tags around paragraph ``node`` can be omitted.
         """
-        if (isinstance(node.parent, nodes.document) or
-            isinstance(node.parent, nodes.compound)):
+        if isinstance(node.parent, (nodes.document, nodes.compound)):
             # Never compact paragraphs in document or compound
             return False
         for key, value in node.attlist():
-            if (node.is_not_default(key) and
-                not (key == 'classes' and value in
-                     ([], ['first'], ['last'], ['first', 'last']))):
+            if node.is_not_default(key) and (
+                key != 'classes'
+                or value not in ([], ['first'], ['last'], ['first', 'last'])
+            ):
                 # Attribute which needs to survive.
                 return False
         first = isinstance(node.parent[0], nodes.label) # skip label
@@ -536,11 +548,14 @@ class SaneHtmlTranslator(HTMLTranslator):
             return False
         parent_length = len([n for n in node.parent if not isinstance(
             n, (nodes.Invisible, nodes.label))])
-        if ( self.compact_simple
-             or self.compact_field_list
-             or self.compact_p and parent_length == 1):
-            return True
-        return False
+        return bool(
+            (
+                self.compact_simple
+                or self.compact_field_list
+                or self.compact_p
+                and parent_length == 1
+            )
+        )
 
     def visit_paragraph(self, node):
         if self.should_be_compact_paragraph(node):
@@ -582,8 +597,7 @@ class SaneHtmlTranslator(HTMLTranslator):
             if (len(node.parent) >= 2 and
                 isinstance(node.parent[1], nodes.subtitle)):
                 atts['CLASS'] = 'with-subtitle'
-            self.body.append(
-                  self.starttag(node, 'h%s' % h_level, '', **atts))
+            self.body.append(self.starttag(node, f'h{h_level}', '', **atts))
             atts = {}
             if node.hasattr('refid'):
                 atts['href'] = '#' + node['refid']
@@ -702,8 +716,7 @@ def hyphenate(value, enable=None, lang=None):
 
 def dehyphenate(value, enable=None):
     if enable is None: enable = settings['M_HTMLSANITY_HYPHENATION']
-    if not enable: return value
-    return value.replace('&shy;', '')
+    return value.replace('&shy;', '') if enable else value
 
 def register_mcss(mcss_settings, jinja_environment, **kwargs):
     global default_settings, settings
@@ -754,7 +767,11 @@ def pelican_expand_links(text, content):
 # and with https://github.com/getpelican/pelican/pull/2196. Keep consistent
 # with m.alias.
 def pelican_format_siteurl(url):
-    return urljoin(pelican_settings['SITEURL'] + ('/' if not pelican_settings['SITEURL'].endswith('/') else ''), url)
+    return urljoin(
+        pelican_settings['SITEURL']
+        + ('' if pelican_settings['SITEURL'].endswith('/') else '/'),
+        url,
+    )
 
 def _pelican_configure(pelicanobj):
     pelicanobj.settings['JINJA_FILTERS']['rtrim'] = rtrim

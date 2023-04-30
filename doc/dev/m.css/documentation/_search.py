@@ -256,7 +256,7 @@ class ResultMap:
         # Write the entries themselves
         for e in self.entries:
             if e.flags & ResultFlag._TYPE == ResultFlag.ALIAS:
-                assert not e.alias is None
+                assert e.alias is not None
                 assert not e.url
                 output += self.alias_struct.pack(e.alias)
             if e.flags & ResultFlag.HAS_PREFIX:
@@ -298,7 +298,7 @@ class Trie:
             return
 
         char = path[0]
-        if not char in self.children:
+        if char not in self.children:
             self.children[char] = (False, Trie())
         if lookahead_barriers and lookahead_barriers[0] == 0:
             lookahead_barriers = lookahead_barriers[1:]
@@ -379,11 +379,10 @@ class Trie:
         hashable = bytes(serialized)
         if merge_subtrees and hashable in hashtable:
             return hashtable[hashable]
-        else:
-            offset = len(output)
-            output += serialized
-            if merge_subtrees: hashtable[hashable] = offset
-            return offset
+        offset = len(output)
+        output += serialized
+        if merge_subtrees: hashtable[hashable] = offset
+        return offset
 
     def serialize(self, merge_subtrees=True) -> bytearray:
         output = bytearray(b'\x00\x00\x00\x00')
@@ -469,10 +468,7 @@ def _pretty_print_trie(serialized: bytearray, hashtable, stats, base_offset, ind
             out += color_map['reset'] + '\n'
             out += color_map['blue'] + indent + color_map['white']
         char = Trie.child_char_struct.unpack_from(serialized, offset + 3)[0]
-        if char <= 127:
-            out += chr(char)
-        else:
-            out += color_map['reset'] + hex(char)
+        out += chr(char) if char <= 127 else color_map['reset'] + hex(char)
         if (show_lookahead_barriers and Trie.child_struct.unpack_from(serialized, offset)[0] & 0x00800000):
             out += color_map['green'] + '$'
         if char > 127 or (show_lookahead_barriers and Trie.child_struct.unpack_from(serialized, offset)[0] & 0x00800000):
@@ -538,20 +534,22 @@ def pretty_print_map(serialized: bytes, *, entryTypeClass, colors=False):
         flags = ResultFlag(ResultMap.flags_struct.unpack_from(serialized, i*4 + 3)[0])
         extra = []
         if flags & ResultFlag._TYPE == ResultFlag.ALIAS:
-            extra += ['alias={}'.format(ResultMap.alias_struct.unpack_from(serialized, offset)[0])]
+            extra += [f'alias={ResultMap.alias_struct.unpack_from(serialized, offset)[0]}']
             offset += ResultMap.alias_struct.size
         if flags & ResultFlag.HAS_PREFIX:
             extra += ['prefix={}[:{}]'.format(*ResultMap.prefix_struct.unpack_from(serialized, offset))]
             offset += ResultMap.prefix_struct.size
         if flags & ResultFlag.HAS_SUFFIX:
-            extra += ['suffix_length={}'.format(ResultMap.suffix_length_struct.unpack_from(serialized, offset)[0])]
+            extra += [
+                f'suffix_length={ResultMap.suffix_length_struct.unpack_from(serialized, offset)[0]}'
+            ]
             offset += ResultMap.suffix_length_struct.size
         if flags & ResultFlag.DEPRECATED:
             extra += ['deprecated']
         if flags & ResultFlag.DELETED:
             extra += ['deleted']
         if flags & ResultFlag._TYPE:
-            extra += ['type={}'.format(entryTypeClass(flags.type).name)]
+            extra += [f'type={entryTypeClass(flags.type).name}']
         next_offset = ResultMap.offset_struct.unpack_from(serialized, (i + 1)*4)[0] & 0x00ffffff
         name, _, url = serialized[offset:next_offset].partition(b'\0')
         out += color_map['cyan'] + str(i) + color_map['blue'] + ': ' + color_map['white'] + name.decode('utf-8') + color_map['blue'] + ' [' + color_map['yellow'] + (color_map['blue'] + ', ' + color_map['yellow']).join(extra) + color_map['blue'] + '] ->' + (' ' + color_map['reset'] + url.decode('utf-8') if url else '')
@@ -566,7 +564,7 @@ def pretty_print_type_map(serialized: bytes, *, entryTypeClass):
     while offset < len(serialized):
         if i: out += ',\n'
         next_class_id, next_offset = type_map_entry_struct.unpack_from(serialized, (i + 1)*type_map_entry_struct.size)
-        out += "({}, {}, '{}')".format(entryTypeClass(i + 1), CssClass(class_id), serialized[offset:next_offset].decode('utf-8'))
+        out += f"({entryTypeClass(i + 1)}, {CssClass(class_id)}, '{serialized[offset:next_offset].decode('utf-8')}')"
         i += 1
         class_id, offset = next_class_id, next_offset
     return out
@@ -579,4 +577,11 @@ def pretty_print(serialized: bytes, *, entryTypeClass, show_merged=False, show_l
     pretty_trie, stats = pretty_print_trie(serialized[search_data_header_struct.size:map_offset], show_merged=show_merged, show_lookahead_barriers=show_lookahead_barriers, colors=colors)
     pretty_map = pretty_print_map(serialized[map_offset:type_map_offset], entryTypeClass=entryTypeClass, colors=colors)
     pretty_type_map = pretty_print_type_map(serialized[type_map_offset:], entryTypeClass=entryTypeClass)
-    return '{} symbols\n'.format(symbol_count) + pretty_trie + '\n' + pretty_map + '\n' + pretty_type_map, stats
+    return (
+        f'{symbol_count} symbols\n{pretty_trie}'
+        + '\n'
+        + pretty_map
+        + '\n'
+        + pretty_type_map,
+        stats,
+    )

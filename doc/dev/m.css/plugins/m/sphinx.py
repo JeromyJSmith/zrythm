@@ -83,7 +83,8 @@ class PyModule(rst.Directive):
         properties = {}
         data = {}
         for name, summary in self.options.get('data', []):
-            if name in data: raise KeyError("duplicate data {}".format(name))
+            if name in data:
+                raise KeyError(f"duplicate data {name}")
             data[name] = summary
 
         output = module_doc_output.setdefault(self.arguments[0], {})
@@ -93,7 +94,9 @@ class PyModule(rst.Directive):
             output['content'] = '\n'.join(self.content)
 
         for name, summary in data.items():
-            data_doc_output.setdefault('{}.{}'.format(self.arguments[0], name), {})['summary'] = summary
+            data_doc_output.setdefault(f'{self.arguments[0]}.{name}', {})[
+                'summary'
+            ] = summary
 
         return []
 
@@ -110,11 +113,13 @@ class PyClass(rst.Directive):
         # dicts. This will blow up if the property / data name is not specified.
         properties = {}
         for name, summary in self.options.get('property', []):
-            if name in properties: raise KeyError("duplicate property {}".format(name))
+            if name in properties:
+                raise KeyError(f"duplicate property {name}")
             properties[name] = summary
         data = {}
         for name, summary in self.options.get('data', []):
-            if name in data: raise KeyError("duplicate data {}".format(name))
+            if name in data:
+                raise KeyError(f"duplicate data {name}")
             data[name] = summary
 
         output = class_doc_output.setdefault(self.arguments[0], {})
@@ -124,9 +129,13 @@ class PyClass(rst.Directive):
             output['content'] = '\n'.join(self.content)
 
         for name, summary in properties.items():
-            property_doc_output.setdefault('{}.{}'.format(self.arguments[0], name), {})['summary'] = summary
+            property_doc_output.setdefault(f'{self.arguments[0]}.{name}', {})[
+                'summary'
+            ] = summary
         for name, summary in data.items():
-            data_doc_output.setdefault('{}.{}'.format(self.arguments[0], name), {})['summary'] = summary
+            data_doc_output.setdefault(f'{self.arguments[0]}.{name}', {})[
+                'summary'
+            ] = summary
 
         return []
 
@@ -142,7 +151,8 @@ class PyEnum(rst.Directive):
         # will blow up if the param name is not specified.
         values = {}
         for name, summary in self.options.get('value', []):
-            if name in values: raise KeyError("duplicate param {}".format(name))
+            if name in values:
+                raise KeyError(f"duplicate param {name}")
             values[name] = summary
 
         output = enum_doc_output.setdefault(self.arguments[0], {})
@@ -152,7 +162,9 @@ class PyEnum(rst.Directive):
             output['content'] = '\n'.join(self.content)
 
         for name, content in values.items():
-            enum_value_doc_output.setdefault('{}.{}'.format(self.arguments[0], name), {})['content'] = content
+            enum_value_doc_output.setdefault(f'{self.arguments[0]}.{name}', {})[
+                'content'
+            ] = content
 
         return []
 
@@ -181,16 +193,10 @@ class PyFunction(rst.Directive):
         # will blow up if the param name is not specified.
         params = {}
         for name, content in self.options.get('param', []):
-            if name in params: raise KeyError("duplicate param {}".format(name))
+            if name in params:
+                raise KeyError(f"duplicate param {name}")
             params[name] = content
-        # Check that exceptions are parsed properly. This will blow up if the
-        # exception name is not specified. Unlike function params not turning
-        # these into a dict since a single type can be raised for multiple
-        # reasons.
-        raises = []
-        for name, content in self.options.get('raise', []):
-            raises += [(name, content)]
-
+        raises = list(self.options.get('raise', []))
         output = function_doc_output.setdefault(self.arguments[0], {})
         if self.options.get('summary'):
             output['summary'] = self.options['summary']
@@ -212,14 +218,7 @@ class PyProperty(rst.Directive):
                    'raise': directives_unchanged_list}
 
     def run(self):
-        # Check that exceptions are parsed properly. This will blow up if the
-        # exception name is not specified. Unlike function params not turning
-        # these into a dict since a single type can be raised for multiple
-        # reasons.
-        raises = []
-        for name, content in self.options.get('raise', []):
-            raises += [(name, content)]
-
+        raises = list(self.options.get('raise', []))
         output = property_doc_output.setdefault(self.arguments[0], {})
         if raises:
             output['raise'] = raises
@@ -248,8 +247,7 @@ link_regexp = re.compile(r'(?P<title>.*) <(?P<link>[^?#]+)(?P<hash>[?#].+)?>')
 
 def parse_link(text):
     link = utils.unescape(text)
-    m = link_regexp.match(link)
-    if m:
+    if m := link_regexp.match(link):
         title, link, hash = m.group('title', 'link', 'hash')
         if not hash: hash = '' # it's None otherwise
     else:
@@ -266,20 +264,20 @@ def parse_intersphinx_inventory(file, base_url, inventory, css_classes):
     # Parse the header, uncompressed
     inventory_version = file.readline().rstrip()
     if inventory_version != b'# Sphinx inventory version 2':
-        raise ValueError("Unsupported inventory version header: {}".format(inventory_version)) # pragma: no cover
+        raise ValueError(f"Unsupported inventory version header: {inventory_version}")
     # those two are not used at the moment, just for completeness
     project = file.readline().rstrip()[11:]
     version = file.readline().rstrip()[11:]
     line = file.readline()
     if b'zlib' not in line:
-        raise ValueError("invalid inventory header (not compressed): {}".format(line)) # pragma: no cover
+        raise ValueError(f"invalid inventory header (not compressed): {line}")
 
     # Decompress the rest. Again mostly a copy of the sphinx code.
     for line in zlib.decompress(file.read()).decode('utf-8').splitlines():
         m = re.match(r'(?x)(.+?)\s+(\S*:\S*)\s+(-?\d+)\s+(\S+)\s+(.*)',
                          line.rstrip())
         if not m: # pragma: no cover
-            print("wait what is this line?! {}".format(line))
+            print(f"wait what is this line?! {line}")
             continue
         # What the F is prio for
         name, type, prio, location, title = m.groups()
@@ -289,7 +287,11 @@ def parse_intersphinx_inventory(file, base_url, inventory, css_classes):
 
         # The original code `continue`s in this case. I'm asserting. Fix your
         # docs.
-        assert not(type == 'py:module' and type in inventory and name in inventory[type]), "Well dang, we hit that bug in 1.1 that I didn't want to work around" # pragma: no cover
+        assert (
+            type != 'py:module'
+            or type not in inventory
+            or name not in inventory[type]
+        ), "Well dang, we hit that bug in 1.1 that I didn't want to work around"
 
         # Prepend base URL and add to the inventory
         inventory.setdefault(type, {})[name] = (urljoin(base_url, location), title, css_classes)
@@ -338,7 +340,11 @@ def ref(name, rawtext, text, lineno, inliner: Inliner, options={}, content=[]):
                 if element.tagname != 'field': continue
                 name_elem, body_elem = element.children
                 if name_elem.astext() == 'ref-prefix':
-                    page_ref_prefixes = [line.strip() + '.' for line in body_elem.astext().splitlines() if line.strip()]
+                    page_ref_prefixes = [
+                        f'{line.strip()}.'
+                        for line in body_elem.astext().splitlines()
+                        if line.strip()
+                    ]
 
         # If we didn't find any, set it to an empty list (not None), so this is
         # not traversed again next time
@@ -356,10 +362,7 @@ def ref(name, rawtext, text, lineno, inliner: Inliner, options={}, content=[]):
     for prefix in prefixes:
         found = None
 
-        # If the target is prefixed with a type, try looking up that type
-        # directly. The implicit link title is then without the type.
-        m = _type_prefix_re.match(target)
-        if m:
+        if m := _type_prefix_re.match(target):
             type = m.group(1)
             prefixed = prefix + target[len(type) + 1:]
             # ALlow trailing () on functions here as well
@@ -403,8 +406,9 @@ def ref(name, rawtext, text, lineno, inliner: Inliner, options={}, content=[]):
                 use_title = link_title
             else:
                 use_title = target
-                # Add () to function refs
-                if found[0] in _function_types and not target.endswith('()'):
+                if found[0] in _function_types and not use_title.endswith(
+                    '()'
+                ):
                     use_title += '()'
 
             _options['classes'] += css_classes
@@ -412,10 +416,12 @@ def ref(name, rawtext, text, lineno, inliner: Inliner, options={}, content=[]):
             return [node], []
 
     if title:
-        logging.warning("Sphinx symbol `{}` not found, rendering just link title".format(target))
+        logging.warning(
+            f"Sphinx symbol `{target}` not found, rendering just link title"
+        )
         node = nodes.inline(rawtext, title, **_options)
     else:
-        logging.warning("Sphinx symbol `{}` not found, rendering as monospace".format(target))
+        logging.warning(f"Sphinx symbol `{target}` not found, rendering as monospace")
         node = nodes.literal(rawtext, target, **_options)
     return [node], []
 
@@ -431,7 +437,10 @@ def scope_enter(type, path, param_names=None, **kwargs):
 
 def scope_exit(type, path, **kwargs):
     global current_referer_path, current_param_names
-    assert current_referer_path[-1] == (type, path), "%s %s" % (current_referer_path, path)
+    assert current_referer_path[-1] == (
+        type,
+        path,
+    ), f"{current_referer_path} {path}"
     current_referer_path = current_referer_path[:-1]
     current_param_names = None
 
@@ -605,7 +614,11 @@ def merge_inventories(name_map, **kwargs):
                     url, title, css_classes = value
                     # The type has to contain a colon. Wtf is the 2?
                     assert ':' in type_
-                    f.write(compressor.compress('{} {} 2 {} {}\n'.format(path, type_, url, title).encode('utf-8')))
+                    f.write(
+                        compressor.compress(
+                            f'{path} {type_} 2 {url} {title}\n'.encode('utf-8')
+                        )
+                    )
             f.write(compressor.flush())
 
 def register_mcss(mcss_settings, module_doc_contents, class_doc_contents, enum_doc_contents, enum_value_doc_contents, function_doc_contents, property_doc_contents, data_doc_contents, hooks_post_crawl, hooks_pre_scope, hooks_post_scope, hooks_docstring, hooks_post_run, **kwargs):
